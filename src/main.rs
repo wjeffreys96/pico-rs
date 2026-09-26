@@ -2,21 +2,14 @@
 #![no_main]
 
 use bsp::entry;
-use bsp::hal::{
-    clocks::{init_clocks_and_plls, Clock},
-    pac,
-    sio::Sio,
-    watchdog::Watchdog,
-    Timer,
-};
-use defmt::*;
-use defmt_rtt as _;
-use embedded_hal::digital::{OutputPin, StatefulOutputPin};
+use bsp::hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Timer};
+use defmt::info;
+use embedded_hal::digital::StatefulOutputPin;
 use panic_probe as _;
-use rp_pico::hal::fugit::{ExtU64, Instant};
-use rp_pico::hal::gpio::bank0::Gpio25;
-use rp_pico::hal::gpio::{FunctionSio, Pin, PullDown, SioOutput};
+use rp_pico::hal::fugit::ExtU64;
+use rp_pico::hal::Clock;
 use rp_pico::{self as bsp};
+use rtt_target::rtt_init;
 
 #[entry]
 fn main() -> ! {
@@ -41,6 +34,7 @@ fn main() -> ! {
     .unwrap();
 
     let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
@@ -49,6 +43,19 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
+    let mut channels = rtt_init! {
+        up: {
+            0: { size: 1024, name: "Terminal" }
+            1: { size: 1024, name: "defmt" }
+        }
+        down: {
+            0: { size: 128, name: "Terminal" }
+        }
+    };
+
+    rtt_target::set_defmt_channel(channels.up.1);
+
+    let mut rtt_buf = [0u8; 128];
     let mut led_pin = pins.led.into_push_pull_output();
     let time_start = timer.get_counter();
     let mut last_led_toggle_time = time_start;
@@ -58,5 +65,10 @@ fn main() -> ! {
             led_pin.toggle();
             last_led_toggle_time = timer.get_counter();
         }
+        let read = channels.down.0.read(&mut rtt_buf);
+        if read > 0 {
+            info!("{:?}", core::str::from_utf8(&rtt_buf[..read - 1]).unwrap());
+        }
+        delay.delay_ms(100);
     }
 }
