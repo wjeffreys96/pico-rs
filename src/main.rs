@@ -4,6 +4,7 @@
 use bsp::entry;
 use bsp::hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Timer};
 use defmt::info;
+use embedded_alloc::LlffHeap as Heap;
 use embedded_hal::digital::StatefulOutputPin;
 use panic_probe as _;
 use rp_pico::hal::fugit::ExtU64;
@@ -11,9 +12,16 @@ use rp_pico::hal::Clock;
 use rp_pico::{self as bsp};
 use rtt_target::rtt_init;
 
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+
 #[entry]
 fn main() -> ! {
     info!("Program start");
+    unsafe {
+        embedded_alloc::init!(HEAP, 1024);
+    }
+
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
